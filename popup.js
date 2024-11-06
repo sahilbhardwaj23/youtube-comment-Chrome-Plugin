@@ -2,7 +2,8 @@
 
 document.addEventListener("DOMContentLoaded", async () => {
   const outputDiv = document.getElementById("output");
-  const API_KEY = 'AIzaSyDutK0KTU7baj68BLubsmMCJv23Go9-zfM';  
+  require('dotenv').config();
+  const API_KEY = process.env.API_KEY;  
   const API_URL = 'http://localhost:5000';
 
   // Get the current tab's URL
@@ -71,7 +72,51 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
           </div>
         `;
+        
 
+    //     if (predictions) {
+    //       const sentimentCounts = { "1": 0, "0": 0, "-1": 0 };
+    //       predictions.forEach(prediction => sentimentCounts[prediction]++);
+    //       const total = predictions.length;
+  
+    //       const positivePercent = ((sentimentCounts["1"] / total) * 100).toFixed(2);
+    //       const neutralPercent = ((sentimentCounts["0"] / total) * 100).toFixed(2);
+    //       const negativePercent = ((sentimentCounts["-1"] / total) * 100).toFixed(2);
+  
+    //       outputDiv.innerHTML += `
+    //         <div class="section">
+    //           <div class="section-title">Sentiment Analysis Results</div>
+    //           <div class="sentiment-boxes">
+    //             <div class="sentiment-box">
+    //               <div class="label">Positive</div>
+    //               <div class="percentage">${positivePercent}%</div>
+    //             </div>
+    //             <div class="sentiment-box">
+    //               <div class="label">Neutral</div>
+    //               <div class="percentage">${neutralPercent}%</div>
+    //             </div>
+    //             <div class="sentiment-box">
+    //               <div class="label">Negative</div>
+    //               <div class="percentage">${negativePercent}%</div>
+    //             </div>
+    //           </div>
+    //         </div>
+    //         <div class="section">
+    //           <div class="section-title">Top 25 Comments with Sentiments</div>
+    //           <ul class="comment-list">
+    //             ${comments.slice(0, 25).map((comment, index) => `
+    //               <li class="comment-item">
+    //                 <span>${index + 1}. ${comment}</span><br>
+    //                 <span class="comment-sentiment">Sentiment: ${predictions[index]}</span>
+    //               </li>`).join('')}
+    //           </ul>
+    //         </div>`;
+    //     }
+    //   } else {
+    //     outputDiv.innerHTML = "<p>This is not a valid YouTube URL.</p>";
+    //   }
+    // });
+    
         // Add the Sentiment Analysis Results section with a placeholder for the chart
         outputDiv.innerHTML += `
           <div class="section">
