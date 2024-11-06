@@ -61,14 +61,3 @@ The extension communicates with a backend API to perform sentiment analysis and 
 ## Contact
 
 For any inquiries or issues, please reach out to [sahilbhardwaj23](https://github.com/sahilbhardwaj23).
-```
-
-### How this works:
-- **Features**: A list of all the functionalities of the Chrome Extension.
-- **Installation**: Step-by-step instructions to install the extension on Chrome.
-- **Usage**: How to use the extension once it's installed.
-- **API Integration**: Information on the backend API that powers the sentiment analysis and generates visualizations.
-- **Dependencies**: Any necessary dependencies for the extension.
-- **Contributing**: Guidelines for contributing to the project.
-- **License**: The license under which the project is distributed.
-- **Acknowledgments**: Credits to the technologies used in the project.
