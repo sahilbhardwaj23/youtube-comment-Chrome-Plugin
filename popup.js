@@ -2,8 +2,7 @@
 
 document.addEventListener("DOMContentLoaded", async () => {
   const outputDiv = document.getElementById("output");
-  require('dotenv').config();
-  const API_KEY = process.env.API_KEY;  
+  const API_KEY = 'Your_YouTube_Api';   
   const API_URL = 'http://localhost:5000';
 
   // Get the current tab's URL
