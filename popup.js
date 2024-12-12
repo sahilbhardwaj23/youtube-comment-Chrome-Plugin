@@ -1,9 +1,11 @@
 // popup.js
-
 document.addEventListener("DOMContentLoaded", async () => {
   const outputDiv = document.getElementById("output");
-  const API_KEY = 'Your_YouTube_Api';   
+  const API_KEY = 'Your_API_Key';  
   const API_URL = 'http://localhost:5000';
+  let globalComments = [];
+  let globalPredictions = [];
+  let currentFilter = 'all';
 
   // Get the current tab's URL
   chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -11,203 +13,405 @@ document.addEventListener("DOMContentLoaded", async () => {
     const youtubeRegex = /^https:\/\/(?:www\.)?youtube\.com\/watch\?v=([\w-]{11})/;
     const match = url.match(youtubeRegex);
 
-    if (match && match[1]) {
-      const videoId = match[1];
-      outputDiv.innerHTML = `<div class="section-title">YouTube Video ID</div><p>${videoId}</p><p>Fetching comments...</p>`;
+    if (!match || !match[1]) {
+      showError("This is not a valid YouTube URL.");
+      return;
+    }
 
-      const comments = await fetchComments(videoId);
+    const videoId = match[1];
+    showLoading("Initializing...");
+
+    try {
+      showLoading("Fetching video details...");
+      const comments = await fetchAllComments(videoId);
+      globalComments = comments;
+      
       if (comments.length === 0) {
-        outputDiv.innerHTML += "<p>No comments found for this video.</p>";
+        showError("No comments found for this video.");
         return;
       }
 
-      outputDiv.innerHTML += `<p>Fetched ${comments.length} comments. Performing sentiment analysis...</p>`;
+      showLoading(`Analyzing ${comments.length} comments...`);
       const predictions = await getSentimentPredictions(comments);
+      globalPredictions = predictions;
 
       if (predictions) {
-        // Process the predictions to get sentiment counts and sentiment data
-        const sentimentCounts = { "1": 0, "0": 0, "-1": 0 };
-        const sentimentData = []; // For trend graph
-        const totalSentimentScore = predictions.reduce((sum, item) => sum + parseInt(item.sentiment), 0);
-        predictions.forEach((item, index) => {
-          sentimentCounts[item.sentiment]++;
-          sentimentData.push({
-            timestamp: item.timestamp,
-            sentiment: parseInt(item.sentiment)
-          });
-        });
-
-        // Compute metrics
-        const totalComments = comments.length;
-        const uniqueCommenters = new Set(comments.map(comment => comment.authorId)).size;
-        const totalWords = comments.reduce((sum, comment) => sum + comment.text.split(/\s+/).filter(word => word.length > 0).length, 0);
-        const avgWordLength = (totalWords / totalComments).toFixed(2);
-        const avgSentimentScore = (totalSentimentScore / totalComments).toFixed(2);
-
-        // Normalize the average sentiment score to a scale of 0 to 10
-        const normalizedSentimentScore = (((parseFloat(avgSentimentScore) + 1) / 2) * 10).toFixed(2);
-
-        // Add the Comment Analysis Summary section
-        outputDiv.innerHTML += `
-          <div class="section">
-            <div class="section-title">Comment Analysis Summary</div>
-            <div class="metrics-container">
-              <div class="metric">
-                <div class="metric-title">Total Comments</div>
-                <div class="metric-value">${totalComments}</div>
-              </div>
-              <div class="metric">
-                <div class="metric-title">Unique Commenters</div>
-                <div class="metric-value">${uniqueCommenters}</div>
-              </div>
-              <div class="metric">
-                <div class="metric-title">Avg Comment Length</div>
-                <div class="metric-value">${avgWordLength} words</div>
-              </div>
-              <div class="metric">
-                <div class="metric-title">Avg Sentiment Score</div>
-                <div class="metric-value">${normalizedSentimentScore}/10</div>
-              </div>
-            </div>
-          </div>
-        `;
-        
-
-    //     if (predictions) {
-    //       const sentimentCounts = { "1": 0, "0": 0, "-1": 0 };
-    //       predictions.forEach(prediction => sentimentCounts[prediction]++);
-    //       const total = predictions.length;
-  
-    //       const positivePercent = ((sentimentCounts["1"] / total) * 100).toFixed(2);
-    //       const neutralPercent = ((sentimentCounts["0"] / total) * 100).toFixed(2);
-    //       const negativePercent = ((sentimentCounts["-1"] / total) * 100).toFixed(2);
-  
-    //       outputDiv.innerHTML += `
-    //         <div class="section">
-    //           <div class="section-title">Sentiment Analysis Results</div>
-    //           <div class="sentiment-boxes">
-    //             <div class="sentiment-box">
-    //               <div class="label">Positive</div>
-    //               <div class="percentage">${positivePercent}%</div>
-    //             </div>
-    //             <div class="sentiment-box">
-    //               <div class="label">Neutral</div>
-    //               <div class="percentage">${neutralPercent}%</div>
-    //             </div>
-    //             <div class="sentiment-box">
-    //               <div class="label">Negative</div>
-    //               <div class="percentage">${negativePercent}%</div>
-    //             </div>
-    //           </div>
-    //         </div>
-    //         <div class="section">
-    //           <div class="section-title">Top 25 Comments with Sentiments</div>
-    //           <ul class="comment-list">
-    //             ${comments.slice(0, 25).map((comment, index) => `
-    //               <li class="comment-item">
-    //                 <span>${index + 1}. ${comment}</span><br>
-    //                 <span class="comment-sentiment">Sentiment: ${predictions[index]}</span>
-    //               </li>`).join('')}
-    //           </ul>
-    //         </div>`;
-    //     }
-    //   } else {
-    //     outputDiv.innerHTML = "<p>This is not a valid YouTube URL.</p>";
-    //   }
-    // });
-    
-        // Add the Sentiment Analysis Results section with a placeholder for the chart
-        outputDiv.innerHTML += `
-          <div class="section">
-            <div class="section-title">Sentiment Analysis Results</div>
-            <p>See the pie chart below for sentiment distribution.</p>
-            <div id="chart-container"></div>
-          </div>`;
-
-        // Fetch and display the pie chart inside the chart-container div
-        await fetchAndDisplayChart(sentimentCounts);
-
-        // Add the Sentiment Trend Graph section
-        outputDiv.innerHTML += `
-          <div class="section">
-            <div class="section-title">Sentiment Trend Over Time</div>
-            <div id="trend-graph-container"></div>
-          </div>`;
-
-        // Fetch and display the sentiment trend graph
-        await fetchAndDisplayTrendGraph(sentimentData);
-
-        // Add the Word Cloud section
-        outputDiv.innerHTML += `
-          <div class="section">
-            <div class="section-title">Comment Wordcloud</div>
-            <div id="wordcloud-container"></div>
-          </div>`;
-
-        // Fetch and display the word cloud inside the wordcloud-container div
-        await fetchAndDisplayWordCloud(comments.map(comment => comment.text));
-
-        // Add the top comments section
-        outputDiv.innerHTML += `
-          <div class="section">
-            <div class="section-title">Top 25 Comments with Sentiments</div>
-            <ul class="comment-list">
-              ${predictions.slice(0, 25).map((item, index) => `
-                <li class="comment-item">
-                  <span>${index + 1}. ${item.comment}</span><br>
-                  <span class="comment-sentiment">Sentiment: ${item.sentiment}</span>
-                </li>`).join('')}
-            </ul>
-          </div>`;
+        displayResults(comments, predictions);
+      } else {
+        showError("Error analyzing comments.");
       }
-    } else {
-      outputDiv.innerHTML = "<p>This is not a valid YouTube URL.</p>";
+    } catch (error) {
+      showError(`Error: ${error.message}`);
+      console.error(error);
     }
   });
 
-  async function fetchComments(videoId) {
+  function showLoading(message) {
+    outputDiv.innerHTML = `
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">${message}</div>
+      </div>`;
+  }
+
+  function showError(message) {
+    outputDiv.innerHTML = `<div class="error">${message}</div>`;
+  }
+
+  function showWarning(message) {
+    const warningDiv = document.createElement('div');
+    warningDiv.className = 'warning';
+    warningDiv.innerHTML = message;
+    outputDiv.appendChild(warningDiv);
+  }
+
+  function updateProgress(current, total) {
+    const percent = Math.round((current / total) * 100);
+    outputDiv.innerHTML = `
+      <div class="progress-container">
+        <div class="progress-text">Fetching comments: ${current} of ${total}</div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${percent}%"></div>
+        </div>
+        <div id="commentCount">Progress: ${percent}%</div>
+      </div>`;
+  }
+
+  async function fetchAllComments(videoId) {
     let comments = [];
     let pageToken = "";
+    let totalComments = 0;
+    const maxRetries = 3;
+    const batchSize = 100;
+
     try {
-      while (comments.length < 500) {
-        const response = await fetch(`https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=100&pageToken=${pageToken}&key=${API_KEY}`);
-        const data = await response.json();
-        if (data.items) {
-          data.items.forEach(item => {
-            const commentText = item.snippet.topLevelComment.snippet.textOriginal;
-            const timestamp = item.snippet.topLevelComment.snippet.publishedAt;
-            const authorId = item.snippet.topLevelComment.snippet.authorChannelId?.value || 'Unknown';
-            comments.push({ text: commentText, timestamp: timestamp, authorId: authorId });
-          });
-        }
-        pageToken = data.nextPageToken;
-        if (!pageToken) break;
+      // Get initial comment count
+      const initialResponse = await fetch(
+        `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=1&key=${API_KEY}`
+      );
+      const initialData = await initialResponse.json();
+      
+      if (initialData.error) {
+        throw new Error(initialData.error.message);
       }
+      
+      totalComments = initialData.pageInfo?.totalResults || 0;
+
+      // Fetch all comments with retry mechanism
+      while (true) {
+        let retryCount = 0;
+        let success = false;
+
+        while (!success && retryCount < maxRetries) {
+          try {
+            const response = await fetch(
+              `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&maxResults=${batchSize}&pageToken=${pageToken}&key=${API_KEY}&textFormat=plainText&order=time`
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            if (data.error) {
+              throw new Error(data.error.message);
+            }
+
+            if (!data.items || data.items.length === 0) {
+              break;
+            }
+
+            data.items.forEach(item => {
+              const snippet = item.snippet.topLevelComment.snippet;
+              comments.push({
+                text: snippet.textOriginal,
+                timestamp: snippet.publishedAt,
+                authorId: snippet.authorChannelId?.value || 'Unknown',
+                likeCount: snippet.likeCount,
+                publishedAt: snippet.publishedAt
+              });
+            });
+
+            updateProgress(comments.length, totalComments);
+
+            pageToken = data.nextPageToken || "";
+            if (!pageToken) break;
+
+            success = true;
+          } catch (error) {
+            retryCount++;
+            console.error(`Retry ${retryCount} failed:`, error);
+            if (retryCount === maxRetries) {
+              throw new Error(`Failed to fetch comments after ${maxRetries} attempts`);
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+          }
+        }
+
+        if (!pageToken) break;
+
+        // Delay between requests
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      if (comments.length < totalComments) {
+        showWarning(`Note: Retrieved ${comments.length} out of ${totalComments} comments`);
+      }
+
     } catch (error) {
       console.error("Error fetching comments:", error);
-      outputDiv.innerHTML += "<p>Error fetching comments.</p>";
+      throw error;
     }
+
     return comments;
   }
 
   async function getSentimentPredictions(comments) {
     try {
-      const response = await fetch(`${API_URL}/predict_with_timestamps`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comments })
-      });
-      const result = await response.json();
-      if (response.ok) {
-        return result; // The result now includes sentiment and timestamp
-      } else {
-        throw new Error(result.error || 'Error fetching predictions');
+      const batchSize = 100;
+      let allPredictions = [];
+
+      for (let i = 0; i < comments.length; i += batchSize) {
+        const batch = comments.slice(i, i + batchSize);
+        showLoading(`Analyzing comments... ${Math.min(i + batchSize, comments.length)}/${comments.length}`);
+
+        const response = await fetch(`${API_URL}/predict_with_timestamps`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comments: batch })
+        });
+
+        if (!response.ok) {
+          throw new Error('Error analyzing comments');
+        }
+
+        const results = await response.json();
+        allPredictions = allPredictions.concat(results);
+
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
+
+      return allPredictions;
     } catch (error) {
-      console.error("Error fetching predictions:", error);
-      outputDiv.innerHTML += "<p>Error fetching sentiment predictions.</p>";
-      return null;
+      console.error("Error in sentiment analysis:", error);
+      throw error;
     }
+  }
+
+  function displayResults(comments, predictions) {
+    const metrics = calculateMetrics(comments, predictions);
+    const sentimentCounts = calculateSentimentCounts(predictions);
+    
+    outputDiv.innerHTML = `
+      <div class="fixed-header">
+        ${generateMetricsSection(metrics)}
+        ${generateSentimentTable(sentimentCounts, predictions.length)}
+        <div class="visualization-container">
+          ${generateChartSection()}
+          ${generateTrendSection()}
+        </div>
+        ${generateWordCloudSection()}
+      </div>
+      <div class="scrollable-content">
+        ${generateFilterButtons()}
+        ${generateCommentsSection(predictions, currentFilter)}
+      </div>
+    `;
+
+    fetchAndDisplayChart(sentimentCounts);
+    fetchAndDisplayTrendGraph(predictions);
+    fetchAndDisplayWordCloud(comments.map(comment => comment.text));
+    setupEventListeners();
+  }
+
+  function calculateMetrics(comments, predictions) {
+    const totalComments = comments.length;
+    const uniqueCommenters = new Set(comments.map(c => c.authorId)).size;
+    const totalWords = comments.reduce((sum, c) => 
+      sum + c.text.split(/\s+/).filter(w => w.length > 0).length, 0
+    );
+    const totalSentiment = predictions.reduce((sum, p) => 
+      sum + parseInt(p.sentiment), 0
+    );
+
+    return {
+      totalComments,
+      uniqueCommenters,
+      avgWordLength: (totalWords / totalComments).toFixed(2),
+      avgSentiment: (((totalSentiment / totalComments) + 1) / 2 * 10).toFixed(2)
+    };
+  }
+
+  function calculateSentimentCounts(predictions) {
+    return predictions.reduce((counts, p) => {
+      counts[p.sentiment]++;
+      return counts;
+    }, { "1": 0, "0": 0, "-1": 0 });
+  }
+
+  function generateFilterButtons() {
+    return `
+      <div class="filter-container">
+        <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">All Comments</button>
+        <button class="filter-btn ${currentFilter === 'positive' ? 'active' : ''}" data-filter="positive">Positive</button>
+        <button class="filter-btn ${currentFilter === 'neutral' ? 'active' : ''}" data-filter="neutral">Neutral</button>
+        <button class="filter-btn ${currentFilter === 'negative' ? 'active' : ''}" data-filter="negative">Negative</button>
+      </div>`;
+  }
+
+  function generateMetricsSection(metrics) {
+    return `
+      <div class="section">
+        <div class="section-title">Comment Analysis Summary</div>
+        <div class="metrics-container">
+          <div class="metric">
+            <div class="metric-title">Total Comments</div>
+            <div class="metric-value">${metrics.totalComments}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-title">Unique Commenters</div>
+            <div class="metric-value">${metrics.uniqueCommenters}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-title">Avg Comment Length</div>
+            <div class="metric-value">${metrics.avgWordLength} words</div>
+          </div>
+          <div class="metric">
+            <div class="metric-title">Avg Sentiment Score</div>
+            <div class="metric-value">${metrics.avgSentiment}/10</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function generateSentimentTable(counts, total) {
+    return `
+      <div class="section">
+        <div class="section-title">Sentiment Analysis Results</div>
+        <table class="sentiment-table">
+          <thead>
+            <tr>
+              <th>Sentiment</th>
+              <th>Count</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="positive-row">
+              <td>Positive</td>
+              <td>${counts["1"]}</td>
+              <td>${((counts["1"] / total) * 100).toFixed(2)}%</td>
+            </tr>
+            <tr class="neutral-row">
+              <td>Neutral</td>
+              <td>${counts["0"]}</td>
+              <td>${((counts["0"] / total) * 100).toFixed(2)}%</td>
+            </tr>
+            <tr class="negative-row">
+              <td>Negative</td>
+              <td>${counts["-1"]}</td>
+              <td>${((counts["-1"] / total) * 100).toFixed(2)}%</td>
+            </tr>
+            <tr>
+              <td>Total</td>
+              <td>${total}</td>
+              <td>100%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function generateChartSection() {
+    return `
+      <div class="section">
+        <div class="section-title">Sentiment Breakdown</div>
+        <div id="chart-container"></div>
+      </div>`;
+  }
+
+  function generateTrendSection() {
+    return `
+      <div class="section">
+        <div class="section-title">Sentiment Trend Over Time</div>
+        <div id="trend-graph-container"></div>
+      </div>`;
+  }
+
+  function generateWordCloudSection() {
+    return `
+      <div class="section">
+        <div class="section-title">Comment Wordcloud</div>
+        <div id="wordcloud-container"></div>
+      </div>`;
+  }
+
+  function generateCommentsSection(predictions, filter) {
+    let filteredPredictions = predictions;
+    
+    if (filter === 'positive') {
+      filteredPredictions = predictions.filter(p => p.sentiment === "1");
+    } else if (filter === 'neutral') {
+      filteredPredictions = predictions.filter(p => p.sentiment === "0");
+    } else if (filter === 'negative') {
+      filteredPredictions = predictions.filter(p => p.sentiment === "-1");
+    }
+
+    const sortedPredictions = filteredPredictions.sort((a, b) => parseInt(b.sentiment) - parseInt(a.sentiment));
+    
+    return `
+      <div class="section">
+        <div class="section-title">Filtered Comments (${filteredPredictions.length})</div>
+        <ul class="comment-list">
+          ${sortedPredictions.map((item, index) => `
+            <li class="comment-item ${getSentimentClass(item.sentiment)}">
+              <span class="comment-text">${item.comment}</span>
+              <div class="comment-metadata">
+                <span class="comment-sentiment">Sentiment: ${getSentimentLabel(item.sentiment)}</span>
+                <span class="comment-timestamp">${formatTimestamp(item.timestamp)}</span>
+              </div>
+            </li>`).join('')}
+        </ul>
+      </div>`;
+  }
+
+  function getSentimentClass(sentiment) {
+    return {
+      "1": "positive",
+      "0": "neutral",
+      "-1": "negative"
+    }[sentiment] || "";
+  }
+
+  function getSentimentLabel(sentiment) {
+    return {
+      "1": "Positive",
+      "0": "Neutral",
+      "-1": "Negative"
+    }[sentiment] || "Unknown";
+  }
+
+  function formatTimestamp(timestamp) {
+    return new Date(timestamp).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function setupEventListeners() {
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    filterButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        currentFilter = button.dataset.filter;
+        filterButtons.forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        displayResults(globalComments, globalPredictions);
+      });
+    });
   }
 
   async function fetchAndDisplayChart(sentimentCounts) {
@@ -217,21 +421,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sentiment_counts: sentimentCounts })
       });
-      if (!response.ok) {
-        throw new Error('Failed to fetch chart image');
-      }
+      if (!response.ok) throw new Error('Failed to fetch chart image');
+      
       const blob = await response.blob();
       const imgURL = URL.createObjectURL(blob);
       const img = document.createElement('img');
       img.src = imgURL;
       img.style.width = '100%';
       img.style.marginTop = '20px';
-      // Append the image to the chart-container div
-      const chartContainer = document.getElementById('chart-container');
-      chartContainer.appendChild(img);
+      document.getElementById('chart-container').appendChild(img);
     } catch (error) {
-      console.error("Error fetching chart image:", error);
-      outputDiv.innerHTML += "<p>Error fetching chart image.</p>";
+      console.error("Error fetching chart:", error);
+      document.getElementById('chart-container').innerHTML = "<p class='error'>Error generating chart</p>";
     }
   }
 
@@ -242,21 +443,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comments })
       });
-      if (!response.ok) {
-        throw new Error('Failed to fetch word cloud image');
-      }
+      if (!response.ok) throw new Error('Failed to fetch word cloud image');
+      
       const blob = await response.blob();
       const imgURL = URL.createObjectURL(blob);
       const img = document.createElement('img');
       img.src = imgURL;
       img.style.width = '100%';
       img.style.marginTop = '20px';
-      // Append the image to the wordcloud-container div
-      const wordcloudContainer = document.getElementById('wordcloud-container');
-      wordcloudContainer.appendChild(img);
+      document.getElementById('wordcloud-container').appendChild(img);
     } catch (error) {
-      console.error("Error fetching word cloud image:", error);
-      outputDiv.innerHTML += "<p>Error fetching word cloud image.</p>";
+      console.error("Error fetching word cloud:", error);
+      document.getElementById('wordcloud-container').innerHTML = "<p class='error'>Error generating word cloud</p>";
     }
   }
 
@@ -267,21 +465,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sentiment_data: sentimentData })
       });
-      if (!response.ok) {
-        throw new Error('Failed to fetch trend graph image');
-      }
+      if (!response.ok) throw new Error('Failed to fetch trend graph image');
+      
       const blob = await response.blob();
       const imgURL = URL.createObjectURL(blob);
       const img = document.createElement('img');
       img.src = imgURL;
       img.style.width = '100%';
       img.style.marginTop = '20px';
-      // Append the image to the trend-graph-container div
-      const trendGraphContainer = document.getElementById('trend-graph-container');
-      trendGraphContainer.appendChild(img);
+      document.getElementById('trend-graph-container').appendChild(img);
     } catch (error) {
-      console.error("Error fetching trend graph image:", error);
-      outputDiv.innerHTML += "<p>Error fetching trend graph image.</p>";
+      console.error("Error fetching trend graph:", error);
+      document.getElementById('trend-graph-container').innerHTML = "<p class='error'>Error generating trend graph</p>";
     }
   }
 });
